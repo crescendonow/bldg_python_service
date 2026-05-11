@@ -4,6 +4,7 @@ from pathlib import Path
 
 import geopandas as gpd
 import ee
+import fiona
 from shapely.geometry import shape, mapping
 
 from services.job_store import JobStore
@@ -28,6 +29,7 @@ async def run(
     job_id: str,
     roi_geojson: dict,
     min_confidence: float,
+    formats: list[str],
     job_store: JobStore,
 ) -> str:
     await job_store.update_job(job_id, status=JobStatus.PROCESSING, progress_pct=10)
@@ -46,7 +48,7 @@ async def run(
             job_id,
             status=JobStatus.COMPLETED,
             progress_pct=100,
-            formats_ready=["gpkg"],
+            formats_ready=formats,
         )
         return out_path
 
@@ -85,5 +87,21 @@ def _run_sync(job_id: str, roi_geojson: dict, min_confidence: float) -> str:
     out_dir = Path(f"/tmp/{job_id}")
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = str(out_dir / "buildings.gpkg")
-    gdf.to_file(out_path, driver="GPKG", layer="buildings")
+    _write_gpkg(gdf, out_path)
     return out_path
+
+
+def _write_gpkg(gdf: gpd.GeoDataFrame, out_path: str) -> None:
+    if gdf.empty:
+        schema = {"geometry": "Polygon", "properties": {}}
+        with fiona.open(
+            out_path,
+            "w",
+            driver="GPKG",
+            layer="buildings",
+            schema=schema,
+            crs="EPSG:4326",
+        ):
+            pass
+        return
+    gdf.to_file(out_path, driver="GPKG", layer="buildings")

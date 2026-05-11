@@ -4,6 +4,7 @@ from pathlib import Path
 
 import geopandas as gpd
 import osmnx as ox
+import fiona
 from shapely.geometry import shape
 
 from services.job_store import JobStore
@@ -11,7 +12,12 @@ from services.drive_client import upload_file
 from models.job import JobStatus
 
 
-async def run(job_id: str, roi_geojson: dict, job_store: JobStore) -> str:
+async def run(
+    job_id: str,
+    roi_geojson: dict,
+    formats: list[str],
+    job_store: JobStore,
+) -> str:
     await job_store.update_job(job_id, status=JobStatus.PROCESSING, progress_pct=10)
 
     try:
@@ -26,7 +32,7 @@ async def run(job_id: str, roi_geojson: dict, job_store: JobStore) -> str:
         out_dir = Path(f"/tmp/{job_id}")
         out_dir.mkdir(parents=True, exist_ok=True)
         out_path = str(out_dir / "buildings.gpkg")
-        gdf.to_file(out_path, driver="GPKG", layer="buildings")
+        _write_gpkg(gdf, out_path)
 
         await job_store.update_job(job_id, progress_pct=85)
 
@@ -39,7 +45,7 @@ async def run(job_id: str, roi_geojson: dict, job_store: JobStore) -> str:
             job_id,
             status=JobStatus.COMPLETED,
             progress_pct=100,
-            formats_ready=["gpkg"],
+            formats_ready=formats,
         )
         return out_path
 
@@ -58,8 +64,17 @@ def _extract_geometry(roi_geojson: dict):
 
 
 def _query_osm(roi_geom) -> gpd.GeoDataFrame:
-    gdf = ox.features_from_polygon(roi_geom, tags={"building": True})
+    try:
+        gdf = ox.features_from_polygon(roi_geom, tags={"building": True})
+    except Exception as exc:
+        if "No matching features" not in str(exc):
+            raise
+        return gpd.GeoDataFrame({"geometry": []}, geometry="geometry", crs="EPSG:4326")
+
     buildings = gdf[gdf.geometry.geom_type.isin(["Polygon", "MultiPolygon"])].copy()
+    if buildings.empty:
+        return gpd.GeoDataFrame({"geometry": []}, geometry="geometry", crs="EPSG:4326")
+
     buildings = buildings.to_crs(epsg=4326)
     # Keep only geometry + basic attributes
     keep_cols = ["geometry"]
@@ -67,3 +82,19 @@ def _query_osm(roi_geom) -> gpd.GeoDataFrame:
         if col in buildings.columns:
             keep_cols.append(col)
     return buildings[keep_cols].reset_index(drop=True)
+
+
+def _write_gpkg(gdf: gpd.GeoDataFrame, out_path: str) -> None:
+    if gdf.empty:
+        schema = {"geometry": "Polygon", "properties": {}}
+        with fiona.open(
+            out_path,
+            "w",
+            driver="GPKG",
+            layer="buildings",
+            schema=schema,
+            crs="EPSG:4326",
+        ):
+            pass
+        return
+    gdf.to_file(out_path, driver="GPKG", layer="buildings")

@@ -25,7 +25,7 @@ async def get_job(job_id: str):
                     status=JobStatus.COMPLETED,
                     result_file_id=file_id,
                     progress_pct=100,
-                    formats_ready=["gpkg"],
+                    formats_ready=job.requested_formats,
                 )
                 job = await job_store.get_job(job_id)
 

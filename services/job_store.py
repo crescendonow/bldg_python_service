@@ -13,9 +13,15 @@ class JobStore:
         self,
         job_id: str,
         method: ExtractionMethod,
+        requested_formats: Optional[list[str]] = None,
         job_name: Optional[str] = None,
     ) -> Job:
-        job = Job(job_id=job_id, method=method, job_name=job_name)
+        job = Job(
+            job_id=job_id,
+            method=method,
+            job_name=job_name,
+            requested_formats=requested_formats or ["gpkg", "geojson"],
+        )
         async with self._lock:
             self._jobs[job_id] = job
         return job

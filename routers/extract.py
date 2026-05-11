@@ -13,17 +13,19 @@ router = APIRouter()
 async def submit_extract(req: ExtractRequest):
     job_store = get_job_store()
     job_id = str(uuid.uuid4())
-    job = await job_store.create_job(job_id, req.method, req.job_name)
+    await job_store.create_job(job_id, req.method, req.formats, req.job_name)
 
     if req.method == ExtractionMethod.OSM:
         asyncio.create_task(
-            osm_extractor.run(job_id, req.roi_geojson, job_store)
+            osm_extractor.run(job_id, req.roi_geojson, req.formats, job_store)
         )
         return {"job_id": job_id, "status": "processing"}
 
     elif req.method == ExtractionMethod.GEE:
         asyncio.create_task(
-            gee_extractor.run(job_id, req.roi_geojson, req.min_confidence, job_store)
+            gee_extractor.run(
+                job_id, req.roi_geojson, req.min_confidence, req.formats, job_store
+            )
         )
         return {"job_id": job_id, "status": "processing"}
 

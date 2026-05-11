@@ -27,7 +27,8 @@ class Job(BaseModel):
     method: ExtractionMethod
     progress_pct: int = 0
     result_file_id: Optional[str] = None
-    formats_ready: list[str] = []
+    requested_formats: list[str] = Field(default_factory=lambda: ["gpkg", "geojson"])
+    formats_ready: list[str] = Field(default_factory=list)
     colab_url: Optional[str] = None
     error: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
