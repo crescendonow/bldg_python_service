@@ -1,5 +1,4 @@
 import os
-import json
 import asyncio
 from pathlib import Path
 
@@ -13,10 +12,10 @@ from models.job import JobStatus
 
 
 def _init_ee():
-    sa_json = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
+    sa_json_str = os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]
     sa_email = os.environ["EE_SERVICE_ACCOUNT_EMAIL"]
     project = os.environ.get("EE_PROJECT", "myearthengine-495505")
-    credentials = ee.ServiceAccountCredentials(sa_email, key_data=sa_json)
+    credentials = ee.ServiceAccountCredentials(sa_email, key_data=sa_json_str)
     ee.Initialize(credentials, project=project)
 
 
