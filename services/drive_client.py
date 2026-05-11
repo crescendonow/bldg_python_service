@@ -4,17 +4,50 @@ import io
 from functools import lru_cache
 from typing import Optional
 
+from google.oauth2 import credentials as oauth_credentials
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 
 _SCOPES = ["https://www.googleapis.com/auth/drive"]
+_TOKEN_URI = "https://oauth2.googleapis.com/token"
+
+
+def _require_env(name: str) -> str:
+    value = os.environ.get(name, "").strip()
+    if not value:
+        raise RuntimeError(f"{name} is required for Google Drive OAuth")
+    return value
+
+
+def _build_oauth_credentials():
+    return oauth_credentials.Credentials(
+        token=None,
+        refresh_token=_require_env("GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN"),
+        token_uri=os.environ.get("GOOGLE_DRIVE_OAUTH_TOKEN_URI") or _TOKEN_URI,
+        client_id=_require_env("GOOGLE_DRIVE_OAUTH_CLIENT_ID"),
+        client_secret=_require_env("GOOGLE_DRIVE_OAUTH_CLIENT_SECRET"),
+        scopes=_SCOPES,
+    )
+
+
+def _build_service_account_credentials():
+    sa_json = os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]
+    info = json.loads(sa_json)
+    return service_account.Credentials.from_service_account_info(info, scopes=_SCOPES)
 
 
 def _build_service():
-    sa_json = os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]
-    info = json.loads(sa_json)
-    creds = service_account.Credentials.from_service_account_info(info, scopes=_SCOPES)
+    auth_mode = os.environ.get("DRIVE_AUTH_MODE", "oauth").strip().lower()
+    if auth_mode == "oauth":
+        creds = _build_oauth_credentials()
+    elif auth_mode == "service_account":
+        creds = _build_service_account_credentials()
+    else:
+        raise RuntimeError(
+            "DRIVE_AUTH_MODE must be 'oauth' or 'service_account' "
+            f"(got {auth_mode!r})"
+        )
     return build("drive", "v3", credentials=creds)
 
 
